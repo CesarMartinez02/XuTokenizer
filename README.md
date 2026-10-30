@@ -4,7 +4,7 @@ A production-grade Byte-Pair Encoding (BPE) tokenizer engineered with the **Hugg
 
 ---
 
-## 📌 Architecture & Design Specifications
+## Architecture & Design Specifications
 
 - **Engine:** Rust-backed BPE (`tokenizers`) for high throughput and zero Python-loop bottlenecks.
 - **Vocabulary Size:** `32,000` tokens.
@@ -22,7 +22,7 @@ A production-grade Byte-Pair Encoding (BPE) tokenizer engineered with the **Hugg
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```text
 ├── src/
@@ -36,7 +36,7 @@ A production-grade Byte-Pair Encoding (BPE) tokenizer engineered with the **Hugg
 
 ---
 
-## 🚀 Quickstart & Testing
+## Quickstart & Testing
 
 ### 1. Installation
 ```bash
@@ -50,7 +50,7 @@ pytest tests/ -v
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 - [x] **Phase 1: Environment & Architecture Configuration** (Special tokens, byte-fallback layout, Llama-2 parameters)
 - [ ] **Phase 2: Bilingual Streaming Data Pipeline** (Balanced 50/50 ES/EN dataset stream)
 - [ ] **Phase 3: Rust-Backed Tokenizer Builder & Trainer** (Metaspace normalizer, digit pre-tokenizer, BPE trainer)
