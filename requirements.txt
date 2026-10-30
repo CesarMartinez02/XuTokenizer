@@ -1,0 +1,14 @@
+# Core Tokenization Engine (Rust-backed)
+tokenizers>=0.19.0
+
+# Dataset Streaming & Hub Access
+datasets>=2.19.0
+huggingface_hub>=0.23.0
+
+# Transformer interoperability (PreTrainedTokenizerFast & PyTorch pipelines)
+transformers>=4.40.0
+
+# Utilities & Validation
+pydantic>=2.7.0
+tqdm>=4.66.0
+pytest>=8.0.0
