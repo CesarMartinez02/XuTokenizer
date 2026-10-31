@@ -28,10 +28,14 @@ A production-grade Byte-Pair Encoding (BPE) tokenizer engineered with the **Hugg
 ├── src/
 │   ├── __init__.py
 │   ├── config.py            # Master tokenizer, streaming & special token configurations
-│   └── data_stream.py       # Bilingual 50/50 streaming pipeline & batch generator
+│   ├── data_stream.py       # Bilingual 50/50 streaming pipeline & batch generator
+│   └── tokenizer_builder.py # Rust BPE assembler, trainer, byte-fallback normalizer & exporter
+├── scripts/
+│   └── train_tokenizer.py   # CLI training entrypoint with HF streaming & local corpora support
 ├── tests/
 │   ├── test_config.py       # Comprehensive unit tests for ID mappings and constraints
-│   └── test_data_stream.py  # Unit tests for streaming, batching, and text filtering
+│   ├── test_data_stream.py  # Unit tests for streaming, batching, and text filtering
+│   └── test_builder.py      # Unit tests for BPE pipeline, byte-fallback, and roundtrip decoding
 ├── requirements.txt         # Core dependencies
 └── README.md
 ```
@@ -50,11 +54,16 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
+### 3. Train Tokenizer via CLI
+```bash
+python scripts/train_tokenizer.py --vocab-size 32000 --samples 50000
+```
+
 ---
 
 ## Roadmap
 - [x] **Phase 1: Environment & Architecture Configuration** (Special tokens, byte-fallback layout, Llama-2 parameters)
 - [x] **Phase 2: Bilingual Streaming Data Pipeline** (Balanced 50/50 ES/EN dataset stream)
-- [ ] **Phase 3: Rust-Backed Tokenizer Builder & Trainer** (Metaspace normalizer, digit pre-tokenizer, BPE trainer)
+- [x] **Phase 3: Rust-Backed Tokenizer Builder & Trainer** (Metaspace normalizer, digit pre-tokenizer, BPE trainer)
 - [ ] **Phase 4: LLM Wrapper** (FastTokenizer, batch encoding, padding, attention masks, chat templates)
 - [ ] **Phase 5: Evaluation & Benchmark Suite** (Fertility ratio, bytes/token compression, speed)
