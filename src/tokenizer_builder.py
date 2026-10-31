@@ -39,12 +39,14 @@ def build_llama2_pipeline(config: TokenizerConfig) -> Tokenizer:
     tokenizer = Tokenizer(model)
 
     # 2. Pre-Tokenizer: Metaspace + Digits
-    # Order: Metaspace with prepend_scheme='first' followed by individual Digits
+    # Scheme is derived directly from config.add_prefix_space
+    prepend_scheme = "first" if config.add_prefix_space else "never"
+
     tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
         [
             pre_tokenizers.Metaspace(
                 replacement=config.metaspace_char,
-                prepend_scheme="first",
+                prepend_scheme=prepend_scheme,
             ),
             pre_tokenizers.Digits(individual_digits=config.split_digits),
         ]
@@ -57,7 +59,7 @@ def build_llama2_pipeline(config: TokenizerConfig) -> Tokenizer:
             decoders.ByteFallback(),
             decoders.Metaspace(
                 replacement=config.metaspace_char,
-                prepend_scheme="first",
+                prepend_scheme=prepend_scheme,
             ),
         ]
     )
@@ -86,7 +88,7 @@ def _normalize_added_tokens(tokenizer: Tokenizer) -> Tokenizer:
     During BPE training, passing all reserved tokens to BpeTrainer sets
     their 'special' flag to True. If byte-fallback tokens remain marked as
     special, tokenizer.decode(ids, skip_special_tokens=True) strips them,
-    corrupting unseen characters, numbers, and emojis. This function flips
+    corrupting unseen characters, numbers, and symbols. This function flips
     the 'special' flag of byte-fallback tokens to False.
     """
     raw_json = json.loads(tokenizer.to_str())
@@ -125,7 +127,7 @@ def save_tokenizer_artifacts(
     tokenizer.save(str(tokenizer_json))
     tokenizer.save(str(tokenizer_standard_json))
 
-    # 2. Save tokenizer_config.json
+    # 2. Save tokenizer_config.json aligned with reserved chat tokens
     spec = config.special_tokens
     tokenizer_config_data = {
         "add_bos_token": True,
@@ -140,14 +142,17 @@ def save_tokenizer_artifacts(
         "tokenizer_class": "LlamaTokenizerFast",
         "chat_template": (
             "{% for message in messages %}"
-            "{% if message['role'] == 'user' %}"
-            "{{ '[INST] ' + message['content'] + ' [/INST]' }}"
+            "{% if message['role'] == 'system' %}"
+            "{{ '<|system|>\\n' + message['content'] + '<|end|>\\n' }}"
+            "{% elif message['role'] == 'user' %}"
+            "{{ '<|user|>\\n' + message['content'] + '<|end|>\\n' }}"
             "{% elif message['role'] == 'assistant' %}"
-            "{{ message['content'] + eos_token }}"
-            "{% elif message['role'] == 'system' %}"
-            "{{ '<<SYS>>\\n' + message['content'] + '\\n<</SYS>>\\n\\n' }}"
+            "{{ '<|assistant|>\\n' + message['content'] + '<|end|>\\n' }}"
             "{% endif %}"
             "{% endfor %}"
+            "{% if add_generation_prompt %}"
+            "{{ '<|assistant|>\\n' }}"
+            "{% endif %}"
         ),
     }
     with open(config_json, "w", encoding="utf-8") as f:
@@ -213,22 +218,8 @@ class LlamaTokenizerTrainer:
         tokenizer.train_from_iterator(iterator, trainer=trainer)
 
         # Normalize byte-fallback tokens so skip_special_tokens=True does not drop them
+        # Note: Tokenizer.from_str() inside _normalize_added_tokens preserves post_processor
         tokenizer = _normalize_added_tokens(tokenizer)
-
-        # Re-attach post-processor to ensure BOS/EOS behavior persists
-        bos_token = self.config.special_tokens.bos_token
-        bos_id = self.config.special_tokens.bos_id
-        eos_token = self.config.special_tokens.eos_token
-        eos_id = self.config.special_tokens.eos_id
-
-        tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{bos_token} $A",
-            pair=f"{bos_token} $A {eos_token} $B:1 {eos_token}:1",
-            special_tokens=[
-                (bos_token, bos_id),
-                (eos_token, eos_id),
-            ],
-        )
 
         if save_artifacts:
             save_tokenizer_artifacts(tokenizer, self.config, output_dir=output_dir)

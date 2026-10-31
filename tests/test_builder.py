@@ -28,7 +28,7 @@ def sample_bilingual_corpus():
         "Los números 1, 2, 3, 4 y 5 deben estar divididos en dígitos individuales.",
         "Numbers 1, 2, 3, 4 and 5 must be separated into individual single digits.",
         "Prueba con acentos: á, é, í, ó, ú, ñ, ü y símbolos matemáticos: 2 + 2 = 4.",
-        "Testing emojis 🚀, 👍, and newlines \n\n with indentation and tabs.",
+        "Testing symbols and currencies: €100, ¥500, copyright © 2026, and newlines \n\n with tabs.",
     ]
 
 
@@ -41,6 +41,20 @@ def test_build_pipeline_structure():
     assert tokenizer.pre_tokenizer is not None
     assert tokenizer.decoder is not None
     assert tokenizer.post_processor is not None
+
+
+def test_add_prefix_space_toggle():
+    """Verify config.add_prefix_space correctly switches Metaspace prepend_scheme."""
+    config_true = TokenizerConfig(add_prefix_space=True)
+    tok_true = build_llama2_pipeline(config_true)
+    splits_true = tok_true.pre_tokenizer.pre_tokenize_str("palabra")
+    assert splits_true[0][0].startswith("▁")
+
+    config_false = TokenizerConfig(add_prefix_space=False)
+    tok_false = build_llama2_pipeline(config_false)
+    splits_false = tok_false.pre_tokenizer.pre_tokenize_str("palabra")
+    assert not splits_false[0][0].startswith("▁")
+    assert splits_false[0][0] == "palabra"
 
 
 def test_train_from_iterator_and_id_reservations(sample_bilingual_corpus):
@@ -81,7 +95,7 @@ def test_bos_token_prepend(sample_bilingual_corpus):
 
 
 def test_lossless_roundtrip_decoding(sample_bilingual_corpus):
-    """Verify decode(encode(text)) restores text without loss across ES/EN, accents, digits, and emojis."""
+    """Verify decode(encode(text)) restores text without loss across ES/EN, accents, digits, and symbols."""
     config = TokenizerConfig(vocab_size=350, min_frequency=1)
     trainer = LlamaTokenizerTrainer(config=config)
     tokenizer = trainer.train_from_iterator(sample_bilingual_corpus)
@@ -91,29 +105,36 @@ def test_lossless_roundtrip_decoding(sample_bilingual_corpus):
         "Text with ñ and accents: cañón, lingüística, murciélago.",
         "Number arithmetic 2026 and 9876543210.",
         "Multiple   spaces   and\nnewlines\n\nare preserved.",
-        "Emoji preservation: 🚀 and 👍.",
+        "Symbol and currency preservation: €100, ¥500, ©, ®, and Greek: α, β, γ.",
     ]
 
     for original in test_cases:
         encoding = tokenizer.encode(original)
-        # Decoding with skip_special_tokens=True strips the BOS <s> but keeps text and emojis
+        # Decoding with skip_special_tokens=True strips the BOS <s> but keeps text and symbols
         decoded = tokenizer.decode(encoding.ids, skip_special_tokens=True)
         assert decoded == original, f"Mismatch for '{original}': got '{decoded}'"
 
 
 def test_digits_are_isolated(sample_bilingual_corpus):
-    """Verify split_digits=True keeps numbers separated into single digit tokens."""
+    """Verify split_digits=True keeps numbers strictly separated into single digit tokens."""
     config = TokenizerConfig(vocab_size=350, min_frequency=1)
     trainer = LlamaTokenizerTrainer(config=config)
     tokenizer = trainer.train_from_iterator(sample_bilingual_corpus)
 
     encoding = tokenizer.encode("1998")
-    # Tokens after BOS should have individual digit tokens for 1, 9, 9, 8
-    tokens = encoding.tokens[1:]
-    # Either direct digit tokens or byte fallback <0x31>, <0x39>, etc.
-    digit_contents = [t.lstrip("▁") for t in tokens if t != "▁"]
-    for d in ["1", "9", "9", "8"]:
-        assert any(d in item or f"<0x{ord(d):02X}>" in item for item in digit_contents)
+    # Discard BOS (first token) and leading whitespace/metaspace token if present
+    raw_tokens = encoding.tokens[1:]
+    digit_tokens = [t.lstrip("▁") for t in raw_tokens if t != "▁"]
+
+    expected_digits = ["1", "9", "9", "8"]
+    assert len(digit_tokens) == len(expected_digits), (
+        f"Expected exactly {len(expected_digits)} single-digit tokens, but got {digit_tokens}"
+    )
+
+    for actual, expected in zip(digit_tokens, expected_digits):
+        assert actual == expected or actual == f"<0x{ord(expected):02X}>", (
+            f"Expected digit '{expected}', got '{actual}'"
+        )
 
 
 def test_artifact_saving(sample_bilingual_corpus, tmp_path: Path):
@@ -137,13 +158,20 @@ def test_artifact_saving(sample_bilingual_corpus, tmp_path: Path):
     assert config_json.exists()
     assert special_map_json.exists()
 
-    # Validate json structure
+    # Validate json structure and aligned chat template
     with open(config_json, "r", encoding="utf-8") as f:
         cfg_data = json.load(f)
         assert cfg_data["bos_token"] == "<s>"
         assert cfg_data["tokenizer_class"] == "LlamaTokenizerFast"
+        # Verify chat template uses aligned reserved tokens (<|system|>, <|user|>, <|assistant|>, <|end|>)
+        chat_tmpl = cfg_data["chat_template"]
+        assert "<|system|>" in chat_tmpl
+        assert "<|user|>" in chat_tmpl
+        assert "<|assistant|>" in chat_tmpl
+        assert "<|end|>" in chat_tmpl
 
     with open(special_map_json, "r", encoding="utf-8") as f:
         spec_data = json.load(f)
         assert spec_data["eos_token"] == "</s>"
         assert "[INST]" in spec_data["additional_special_tokens"]
+        assert "<|system|>" in spec_data["additional_special_tokens"]
