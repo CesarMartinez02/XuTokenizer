@@ -118,6 +118,12 @@ class DataStreamConfig:
     target_sample_count: int = 50_000  # Number of articles/chunks to stream
     min_text_length_chars: int = 50   # Discard snippets shorter than 50 chars
     seed: int = 42
+    show_progress: bool = True
+
+    # Local filesystem options (optional overrides for offline / private data)
+    local_es_files: Optional[List[str]] = None
+    local_en_files: Optional[List[str]] = None
+    local_dir: Optional[Path] = None
 
 
 @dataclass

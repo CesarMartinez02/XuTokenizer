@@ -27,9 +27,11 @@ A production-grade Byte-Pair Encoding (BPE) tokenizer engineered with the **Hugg
 ```text
 ├── src/
 │   ├── __init__.py
-│   └── config.py            # Master tokenizer, streaming & special token configurations
+│   ├── config.py            # Master tokenizer, streaming & special token configurations
+│   └── data_stream.py       # Bilingual 50/50 streaming pipeline & batch generator
 ├── tests/
-│   └── test_config.py       # Comprehensive unit tests for ID mappings and constraints
+│   ├── test_config.py       # Comprehensive unit tests for ID mappings and constraints
+│   └── test_data_stream.py  # Unit tests for streaming, batching, and text filtering
 ├── requirements.txt         # Core dependencies
 └── README.md
 ```
@@ -52,7 +54,7 @@ pytest tests/ -v
 
 ## Roadmap
 - [x] **Phase 1: Environment & Architecture Configuration** (Special tokens, byte-fallback layout, Llama-2 parameters)
-- [ ] **Phase 2: Bilingual Streaming Data Pipeline** (Balanced 50/50 ES/EN dataset stream)
+- [x] **Phase 2: Bilingual Streaming Data Pipeline** (Balanced 50/50 ES/EN dataset stream)
 - [ ] **Phase 3: Rust-Backed Tokenizer Builder & Trainer** (Metaspace normalizer, digit pre-tokenizer, BPE trainer)
 - [ ] **Phase 4: LLM Wrapper** (FastTokenizer, batch encoding, padding, attention masks, chat templates)
 - [ ] **Phase 5: Evaluation & Benchmark Suite** (Fertility ratio, bytes/token compression, speed)
