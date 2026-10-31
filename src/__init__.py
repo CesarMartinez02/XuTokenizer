@@ -7,6 +7,7 @@ from .config import (
     TokenizerConfig,
 )
 from .data_stream import BilingualDataStreamer, StreamingTelemetry
+from .llama_tokenizer import BatchEncoding, LlamaTokenizer
 from .tokenizer_builder import (
     LlamaTokenizerTrainer,
     build_llama2_pipeline,
@@ -23,4 +24,6 @@ __all__ = [
     "build_llama2_pipeline",
     "LlamaTokenizerTrainer",
     "save_tokenizer_artifacts",
+    "LlamaTokenizer",
+    "BatchEncoding",
 ]
