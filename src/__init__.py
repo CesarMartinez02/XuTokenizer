@@ -7,6 +7,12 @@ from .config import (
     TokenizerConfig,
 )
 from .data_stream import BilingualDataStreamer, StreamingTelemetry
+from .evaluator import (
+    BUILTIN_BENCHMARK_CORPUS,
+    EvaluationReport,
+    LanguageMetrics,
+    TokenizerEvaluator,
+)
 from .llama_tokenizer import BatchEncoding, LlamaTokenizer
 from .tokenizer_builder import (
     LlamaTokenizerTrainer,
@@ -26,4 +32,8 @@ __all__ = [
     "save_tokenizer_artifacts",
     "LlamaTokenizer",
     "BatchEncoding",
+    "TokenizerEvaluator",
+    "LanguageMetrics",
+    "EvaluationReport",
+    "BUILTIN_BENCHMARK_CORPUS",
 ]

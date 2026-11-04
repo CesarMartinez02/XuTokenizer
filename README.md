@@ -29,15 +29,18 @@ A production-grade Byte-Pair Encoding (BPE) tokenizer engineered with the **Hugg
 │   ├── __init__.py
 │   ├── config.py            # Master tokenizer, streaming & special token configurations
 │   ├── data_stream.py       # Bilingual 50/50 streaming pipeline & batch generator
+│   ├── evaluator.py         # Evaluation metrics (fertility, bytes/token, throughput)
 │   ├── llama_tokenizer.py   # High-level PyTorch-ready LLM wrapper (batching, pad, mask, chat)
 │   └── tokenizer_builder.py # Rust BPE assembler, trainer, byte-fallback normalizer & exporter
 ├── scripts/
-│   └── train_tokenizer.py   # CLI training entrypoint with HF streaming & local corpora support
+│   ├── train_tokenizer.py   # CLI training entrypoint with HF streaming & local corpora support
+│   └── benchmark.py         # CLI evaluation and side-by-side benchmark runner
 ├── tests/
 │   ├── test_config.py       # Comprehensive unit tests for ID mappings and constraints
 │   ├── test_data_stream.py  # Unit tests for streaming, batching, and text filtering
 │   ├── test_builder.py      # Unit tests for BPE pipeline, byte-fallback, and roundtrip decoding
-│   └── test_wrapper.py      # Unit tests for batch encoding, padding, attention masks, and chat
+│   ├── test_wrapper.py      # Unit tests for batch encoding, padding, attention masks, and chat
+│   └── test_evaluator.py    # Unit tests for fertility, compression, zero-UNK, and speed
 ├── requirements.txt         # Core dependencies
 └── README.md
 ```
@@ -61,7 +64,17 @@ pytest tests/ -v
 python scripts/train_tokenizer.py --vocab-size 32000 --samples 50000
 ```
 
-### 4. Basic Python Usage
+### 4. Run Benchmark & Evaluation Suite
+```bash
+python scripts/benchmark.py --tokenizer-path artifacts/
+```
+
+Optional side-by-side comparison with a reference tokenizer:
+```bash
+python scripts/benchmark.py --tokenizer-path artifacts/ --compare-with /path/to/reference/tokenizer
+```
+
+### 5. Basic Python Usage
 ```python
 from src.llama_tokenizer import LlamaTokenizer
 
@@ -87,4 +100,4 @@ print("Attention Mask:", batch.attention_mask)
 - [x] **Phase 2: Bilingual Streaming Data Pipeline** (Balanced 50/50 ES/EN dataset stream)
 - [x] **Phase 3: Rust-Backed Tokenizer Builder & Trainer** (Metaspace normalizer, digit pre-tokenizer, BPE trainer)
 - [x] **Phase 4: LLM Wrapper** (FastTokenizer, batch encoding, padding, attention masks, chat templates)
-- [ ] **Phase 5: Evaluation & Benchmark Suite** (Fertility ratio, bytes/token compression, speed)
+- [x] **Phase 5: Evaluation & Benchmark Suite** (Fertility ratio, bytes/token compression, speed)
