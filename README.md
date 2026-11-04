@@ -94,10 +94,3 @@ print("Attention Mask:", batch.attention_mask)
 ```
 
 ---
-
-## Roadmap
-- [x] **Phase 1: Environment & Architecture Configuration** (Special tokens, byte-fallback layout, Llama-2 parameters)
-- [x] **Phase 2: Bilingual Streaming Data Pipeline** (Balanced 50/50 ES/EN dataset stream)
-- [x] **Phase 3: Rust-Backed Tokenizer Builder & Trainer** (Metaspace normalizer, digit pre-tokenizer, BPE trainer)
-- [x] **Phase 4: LLM Wrapper** (FastTokenizer, batch encoding, padding, attention masks, chat templates)
-- [x] **Phase 5: Evaluation & Benchmark Suite** (Fertility ratio, bytes/token compression, speed)
