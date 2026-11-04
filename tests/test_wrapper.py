@@ -1,5 +1,6 @@
 """Unit tests for LlamaTokenizer LLM Wrapper."""
 
+import json
 import pytest
 import sys
 from pathlib import Path
@@ -36,6 +37,22 @@ def test_wrapper_encode_and_decode(trained_wrapper: LlamaTokenizer):
     assert token_ids[0] == trained_wrapper.bos_token_id
 
     decoded = trained_wrapper.decode(token_ids, skip_special_tokens=True)
+    assert decoded == text
+
+
+def test_wrapper_decode_tensor_like(trained_wrapper: LlamaTokenizer):
+    """Verify decode supports tensor-like objects implementing .tolist()."""
+    class MockTensor:
+        def __init__(self, data):
+            self.data = data
+        def tolist(self):
+            return self.data
+
+    text = "Inteligencia artificial"
+    token_ids = trained_wrapper.encode(text, add_special_tokens=True)
+    mock_tensor = MockTensor(token_ids)
+
+    decoded = trained_wrapper.decode(mock_tensor, skip_special_tokens=True)
     assert decoded == text
 
 
@@ -149,6 +166,24 @@ def test_save_and_from_pretrained(trained_wrapper: LlamaTokenizer, tmp_path: Pat
     # Ensure encoding is identical
     sample = "Validación de consistencia entre tokenizador original y recargado."
     assert reloaded.encode(sample) == trained_wrapper.encode(sample)
+
+
+def test_from_pretrained_filters_config_jsons(trained_wrapper: LlamaTokenizer, tmp_path: Path):
+    """Verify from_pretrained ignores tokenizer_config.json and special_tokens_map.json when scanning directory."""
+    target_dir = tmp_path / "filtered_dir"
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save tokenizer with custom model name (e.g. my_model.json instead of tokenizer.json)
+    custom_model_json = target_dir / "my_custom_model.json"
+    trained_wrapper.raw_tokenizer.save(str(custom_model_json))
+
+    # Add mock config JSONs that are not tokenizer definitions
+    (target_dir / "tokenizer_config.json").write_text('{"bos_token": "<s>"}', encoding="utf-8")
+    (target_dir / "special_tokens_map.json").write_text('{"bos_token": "<s>"}', encoding="utf-8")
+
+    # from_pretrained should find my_custom_model.json and ignore the other two
+    reloaded = LlamaTokenizer.from_pretrained(target_dir)
+    assert reloaded.vocab_size == trained_wrapper.vocab_size
 
 
 def test_callable_interface(trained_wrapper: LlamaTokenizer):

@@ -88,6 +88,23 @@ def test_evaluation_report_aggregation():
     assert "es" in parsed["metrics_by_language"]
 
 
+def test_evaluation_report_dynamic_overall_unk():
+    """Verify that overall_unk_rate in EvaluationReport is calculated dynamically."""
+    m_clean = LanguageMetrics(language="es", total_words=10, total_tokens=100, unk_tokens=0)
+    m_unseen = LanguageMetrics(language="en", total_words=10, total_tokens=100, unk_tokens=10)
+
+    report = EvaluationReport(metrics={"es": m_clean, "en": m_unseen})
+    assert report.overall_tokens == 200
+    assert report.overall_unk_tokens == 10
+    assert report.overall_unk_rate == 5.0
+
+    table_str = report.summary_table()
+    assert "5.00%" in table_str
+    report_dict = report.to_dict()
+    assert report_dict["overall_unk_tokens"] == 10
+    assert report_dict["overall_unk_rate_percent"] == 5.0
+
+
 def test_evaluator_evaluate_corpus(trained_eval_tokenizer: LlamaTokenizer):
     """Verify evaluating a corpus produces accurate word, token, and byte counts."""
     evaluator = TokenizerEvaluator(trained_eval_tokenizer)
@@ -103,6 +120,7 @@ def test_evaluator_evaluate_corpus(trained_eval_tokenizer: LlamaTokenizer):
     assert metrics.total_bytes > 0
     assert metrics.unk_tokens == 0
     assert metrics.fertility > 0
+    assert metrics.elapsed_seconds > 0
 
 
 def test_zero_unk_guarantee(trained_eval_tokenizer: LlamaTokenizer):

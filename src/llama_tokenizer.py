@@ -3,6 +3,7 @@
 Provides a production-ready, PyTorch-compatible tokenizer interface
 supporting:
 - Fast encoding and decoding (powered by Hugging Face Rust tokenizers)
+- Multi-threaded batched tokenization via raw_tokenizer.encode_batch
 - Dynamic batched tokenization with attention masks
 - Left and right padding strategies (crucial for batched generation vs. training)
 - Sequence truncation with configurable max_length
@@ -163,19 +164,21 @@ class LlamaTokenizer:
 
     def decode(
         self,
-        token_ids: Union[List[int], int],
+        token_ids: Any,
         skip_special_tokens: bool = True,
     ) -> str:
         """Decodes token ID(s) back into a text string.
 
         Args:
-            token_ids: Integer token ID or list of IDs.
+            token_ids: Integer token ID, list of IDs, or PyTorch/NumPy tensor with .tolist().
             skip_special_tokens: Whether to strip BOS/EOS control tokens.
 
         Returns:
             Decoded Unicode text string.
         """
-        if isinstance(token_ids, int):
+        if hasattr(token_ids, "tolist"):
+            token_ids = token_ids.tolist()
+        elif isinstance(token_ids, int):
             token_ids = [token_ids]
         return self.raw_tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
@@ -208,18 +211,18 @@ class LlamaTokenizer:
         if side not in ("left", "right"):
             raise ValueError(f"padding_side must be 'left' or 'right', got {side!r}")
 
-        # 1. Encode all texts individually
-        raw_sequences: List[List[int]] = []
-        for text in texts:
-            ids = self.encode(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                max_length=max_length,
-                truncation=truncation,
-            )
-            raw_sequences.append(ids)
+        # 1. Multi-threaded encoding in Rust via raw_tokenizer.encode_batch
+        encodings = self.raw_tokenizer.encode_batch(texts, add_special_tokens=add_special_tokens)
+        raw_sequences: List[List[int]] = [enc.ids for enc in encodings]
 
-        # 2. Determine target padding length
+        # 2. Sequence truncation if requested
+        if truncation and max_length is not None:
+            if side == "left":
+                raw_sequences = [s[-max_length:] if len(s) > max_length else s for s in raw_sequences]
+            else:
+                raw_sequences = [s[:max_length] if len(s) > max_length else s for s in raw_sequences]
+
+        # 3. Determine target padding length
         target_len: Optional[int] = None
         if padding is True or padding == "longest":
             target_len = max((len(seq) for seq in raw_sequences), default=0)
@@ -228,7 +231,7 @@ class LlamaTokenizer:
                 raise ValueError("max_length must be specified when padding='max_length'")
             target_len = max_length
 
-        # 3. Apply padding and build attention masks
+        # 4. Apply padding and build attention masks
         padded_ids: List[List[int]] = []
         attention_masks: List[List[int]] = []
         pad_id = self.pad_token_id if self.pad_token_id is not None else 3
@@ -251,7 +254,7 @@ class LlamaTokenizer:
             padded_ids.append(p_seq)
             attention_masks.append(p_mask)
 
-        # 4. Optional PyTorch Tensor conversion
+        # 5. Optional PyTorch Tensor conversion
         if return_tensors == "pt":
             try:
                 import torch
@@ -269,13 +272,13 @@ class LlamaTokenizer:
 
     def batch_decode(
         self,
-        sequences: List[List[int]],
+        sequences: List[Any],
         skip_special_tokens: bool = True,
     ) -> List[str]:
         """Decodes a batch of token sequences back into strings.
 
         Args:
-            sequences: List of lists of integer token IDs.
+            sequences: List of lists of integer token IDs (or 2D tensors).
             skip_special_tokens: Whether to strip BOS/EOS control tokens.
 
         Returns:
@@ -358,12 +361,16 @@ class LlamaTokenizer:
             raw_tok = Tokenizer.from_file(str(path))
             return cls(raw_tokenizer=raw_tok)
 
-        # Directory mode: locate tokenizer.json or named json
+        # Directory mode: locate tokenizer.json or named model json, filtering config files
         json_file = path / "tokenizer.json"
         if not json_file.exists():
-            candidates = list(path.glob("*.json"))
+            candidates = [
+                p
+                for p in path.glob("*.json")
+                if p.name not in ("tokenizer_config.json", "special_tokens_map.json")
+            ]
             if not candidates:
-                raise FileNotFoundError(f"No tokenizer .json file found in {path}")
+                raise FileNotFoundError(f"No tokenizer definition .json file found in {path}")
             json_file = candidates[0]
 
         raw_tok = Tokenizer.from_file(str(json_file))

@@ -2,6 +2,7 @@
 
 Usage:
   python scripts/benchmark.py --help
+  python scripts/benchmark.py --demo
   python scripts/benchmark.py --tokenizer-path artifacts/
   python scripts/benchmark.py --tokenizer-path artifacts/ --output-json benchmark_results.json
   python scripts/benchmark.py --tokenizer-path artifacts/ --compare-with /path/to/other/tokenizer
@@ -18,8 +19,10 @@ from typing import List, Optional
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.config import TokenizerConfig
 from src.evaluator import BUILTIN_BENCHMARK_CORPUS, TokenizerEvaluator
 from src.llama_tokenizer import LlamaTokenizer
+from src.tokenizer_builder import LlamaTokenizerTrainer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,6 +45,21 @@ def load_lines_from_file(file_path: Optional[str]) -> Optional[List[str]]:
     return lines if lines else None
 
 
+def train_demo_tokenizer() -> LlamaTokenizer:
+    """Trains an in-memory demo tokenizer on the built-in corpus for immediate benchmarking."""
+    logger.info("Initializing in-memory demo tokenizer for cold execution...")
+    demo_corpus = (
+        BUILTIN_BENCHMARK_CORPUS["es"]
+        + BUILTIN_BENCHMARK_CORPUS["en"]
+        + BUILTIN_BENCHMARK_CORPUS["code"]
+    )
+    demo_config = TokenizerConfig(vocab_size=350, min_frequency=1)
+    trainer = LlamaTokenizerTrainer(config=demo_config)
+    raw_tok = trainer.train_from_iterator(demo_corpus, save_artifacts=False)
+    logger.info("Demo tokenizer successfully calibrated.")
+    return LlamaTokenizer(raw_tokenizer=raw_tok, config=demo_config)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run evaluation benchmarks on Llama-2 Bilingual Tokenizers."
@@ -51,6 +69,11 @@ def main() -> None:
         type=str,
         default=str(PROJECT_ROOT / "artifacts"),
         help="Path to tokenizer directory (artifacts/) or .json file.",
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Run in demo mode by training a quick in-memory tokenizer if artifacts are missing.",
     )
     parser.add_argument(
         "--compare-with",
@@ -85,19 +108,25 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # 1. Load primary tokenizer
+    # 1. Resolve or train primary tokenizer
     tok_path = Path(args.tokenizer_path)
-    if not tok_path.exists():
-        logger.error("Specified tokenizer path does not exist: %s", tok_path)
-        logger.info("Tip: Train a model first via 'python scripts/train_tokenizer.py' or provide a trained .json.")
-        sys.exit(1)
+    primary_tok: Optional[LlamaTokenizer] = None
 
-    logger.info("Loading tokenizer from: %s", tok_path)
-    try:
-        primary_tok = LlamaTokenizer.from_pretrained(tok_path)
-    except Exception as exc:
-        logger.error("Failed to load tokenizer: %s", exc)
-        sys.exit(1)
+    if args.demo:
+        primary_tok = train_demo_tokenizer()
+    elif tok_path.exists():
+        logger.info("Loading tokenizer from: %s", tok_path)
+        try:
+            primary_tok = LlamaTokenizer.from_pretrained(tok_path)
+        except Exception as exc:
+            logger.warning("Could not load from %s (%s). Falling back to demo tokenizer.", tok_path, exc)
+            primary_tok = train_demo_tokenizer()
+    else:
+        logger.info(
+            "Artifacts not found at '%s'. Running in automatic DEMO mode.",
+            tok_path,
+        )
+        primary_tok = train_demo_tokenizer()
 
     # 2. Prepare corpora
     es_corpus = load_lines_from_file(args.eval_es)

@@ -87,7 +87,7 @@ class LanguageMetrics:
             "unk_rate_percent": round(self.unk_rate, 4),
             "byte_fallback_tokens": self.byte_fallback_tokens,
             "byte_fallback_rate_percent": round(self.byte_fallback_rate, 4),
-            "elapsed_seconds": round(self.elapsed_seconds, 4),
+            "elapsed_seconds": round(self.elapsed_seconds, 6),
             "throughput_mb_s": round(self.throughput_mb_s, 2),
             "tokens_per_second": round(self.tokens_per_second, 1),
         }
@@ -121,6 +121,14 @@ class EvaluationReport:
     def overall_bytes_per_token(self) -> float:
         return self.overall_bytes / max(1, self.overall_tokens)
 
+    @property
+    def overall_unk_tokens(self) -> int:
+        return sum(m.unk_tokens for m in self.metrics.values())
+
+    @property
+    def overall_unk_rate(self) -> float:
+        return (self.overall_unk_tokens / max(1, self.overall_tokens)) * 100.0
+
     def summary_table(self) -> str:
         """Renders a clean ASCII summary table of the evaluation results."""
         header = (
@@ -130,25 +138,27 @@ class EvaluationReport:
         )
         rows = []
         for lang, m in self.metrics.items():
+            unk_str = f"{m.unk_rate:.2f}%"
             row = (
                 f"| {lang:<10} "
                 f"| {m.total_words:<8} "
                 f"| {m.total_tokens:<8} "
                 f"| {m.fertility:<10.3f} "
                 f"| {m.bytes_per_token:<10.3f} "
-                f"| {m.unk_rate:<7.2f}% "
+                f"| {unk_str:<8} "
                 f"| {m.throughput_mb_s:<10.2f} |"
             )
             rows.append(row)
 
         divider = f"+{'-'*12}+{'-'*10}+{'-'*10}+{'-'*12}+{'-'*12}+{'-'*10}+{'-'*12}+"
+        overall_unk_str = f"{self.overall_unk_rate:.2f}%"
         summary_row = (
             f"| OVERALL    "
             f"| {self.overall_words:<8} "
             f"| {self.overall_tokens:<8} "
             f"| {self.overall_fertility:<10.3f} "
             f"| {self.overall_bytes_per_token:<10.3f} "
-            f"| 0.00%    "
+            f"| {overall_unk_str:<8} "
             f"| {'-':<10} |"
         )
         footer = divider
@@ -165,6 +175,8 @@ class EvaluationReport:
             "overall_bytes": self.overall_bytes,
             "overall_fertility": round(self.overall_fertility, 3),
             "overall_bytes_per_token": round(self.overall_bytes_per_token, 3),
+            "overall_unk_tokens": self.overall_unk_tokens,
+            "overall_unk_rate_percent": round(self.overall_unk_rate, 4),
             "metrics_by_language": {lang: m.to_dict() for lang, m in self.metrics.items()},
         }
 
@@ -247,6 +259,9 @@ class TokenizerEvaluator:
     def evaluate_corpus(self, texts: List[str], language: str = "es") -> LanguageMetrics:
         """Evaluates a collection of texts in a given language.
 
+        Separates pure tokenization execution time from statistical regex and byte computations
+        to ensure throughput (MB/s) reflects genuine tokenizer engine speed.
+
         Args:
             texts: List of text samples to tokenize and measure.
             language: Language or category identifier (e.g. 'es', 'en', 'code').
@@ -257,12 +272,15 @@ class TokenizerEvaluator:
         metrics = LanguageMetrics(language=language)
         metrics.total_samples = len(texts)
 
-        start_time = time.perf_counter()
+        # 1. Pure tokenization timed in isolation
+        t0 = time.perf_counter()
+        tokenized_sequences: List[List[int]] = [self._encode_text(t) for t in texts]
+        metrics.elapsed_seconds = max(1e-6, time.perf_counter() - t0)
 
-        for text in texts:
+        # 2. Text metrics and token inspection outside the timer
+        for text, token_ids in zip(texts, tokenized_sequences):
             words = WORD_REGEX.findall(text)
             raw_bytes = text.encode("utf-8")
-            token_ids = self._encode_text(text)
 
             metrics.total_words += len(words)
             metrics.total_characters += len(text)
@@ -277,7 +295,6 @@ class TokenizerEvaluator:
                 elif 10 <= tid <= 265:
                     metrics.byte_fallback_tokens += 1
 
-        metrics.elapsed_seconds = max(1e-6, time.perf_counter() - start_time)
         return metrics
 
     def evaluate_bilingual(
